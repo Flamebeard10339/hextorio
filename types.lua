@@ -41,6 +41,7 @@
 ---| "command-remove-item-value"
 ---| "command-remove-trade"
 ---| "command-set-item-value"
+---| "command-snap-to-hex-grid"
 ---| "command-solve-item-values"
 ---| "control-gui-back"
 ---| "control-gui-find"

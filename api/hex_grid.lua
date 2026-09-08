@@ -4,6 +4,8 @@ local sets = require "api.sets"
 local axial = require "api.util.axial"
 local rect = require "api.util.rect"
 local hex_util = require "api.util.hex"
+local hex_lattice = require "api.util.hex_lattice"
+local blueprints = require "api.blueprints"
 local hex_island = require "api.hex_island"
 local event_system = require "api.event_system"
 local terrain = require "api.terrain"
@@ -225,6 +227,36 @@ function hex_grid.register_events()
         hex_grid.claim_hexes_range(player.surface.name, hex_pos, params[1] or 0, nil, true) -- claim by server
     end)
 
+    event_system.register("command-snap-to-hex-grid", function(player, params)
+        local transformation = terrain.get_surface_transformation(player.surface)
+        if not transformation then return end
+
+        local snapping = hex_lattice.get_blueprint_snapping(transformation.scale, transformation.rotation)
+        if not snapping then
+            player.print {"hextorio.snap-to-hex-grid-rotated"}
+            return
+        end
+
+        local blueprint ---@type LuaItemStack|LuaRecord|nil
+        local stack = player.cursor_stack
+        if stack and stack.valid_for_read and stack.is_blueprint then
+            blueprint = stack
+        else
+            -- Blueprints held from the blueprint library are records rather than item stacks
+            local record = player.cursor_record
+            if record and record.valid_for_write and record.type == "blueprint" then
+                blueprint = record
+            end
+        end
+
+        if not blueprint then
+            player.print {"hextorio.snap-to-hex-grid-no-blueprint", snapping.snap_to_grid.x, snapping.snap_to_grid.y}
+            return
+        end
+
+        blueprints.apply_hex_snapping(blueprint, transformation.scale, transformation.rotation)
+        player.print {"hextorio.snap-to-hex-grid-applied", snapping.snap_to_grid.x, snapping.snap_to_grid.y}
+    end)
 
 
     event_system.register("feature-unlocked", function(feature_name)
@@ -2929,7 +2961,7 @@ function hex_grid.get_hex_resource_entities(hex_core)
     local entities = hex_core.surface.find_entities_filtered {
         type = "resource",
         position = hex_core.position,
-        radius = transformation.scale * storage.constants.ROOT_THREE_OVER_TWO + 0.5,
+        radius = axial.get_hex_inradius(transformation.scale) + 0.5,
     }
 
     -- Filter out invalid entities

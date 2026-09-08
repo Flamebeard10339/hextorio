@@ -4,6 +4,7 @@
 -- i.e. squares vs. hexagons
 
 local lib = require "api.lib"
+local hex_lattice = require "api.util.hex_lattice"
 
 local axial = {}
 
@@ -25,6 +26,17 @@ local directions_by_offset = {[-1] = {}, [0] = {}, [1] = {}}
 for i = 1, 6 do
     local offset = adjacency_offsets[i]
     directions_by_offset[offset.q][offset.r] = i
+end
+
+
+---Return whether hexes are placed at the exact regular-hexagon spacing instead of on the hex grid's lattice.
+---Only worlds whose terrain was generated before the lattice existed do, so that their hexes stay where their terrain
+---already put them.  Every world created since sets the flag to false in `data/hex_grid.lua`, so an absent flag means
+---the world predates it, whether or not a migration has run yet.
+---@return boolean
+local function is_continuous()
+    local hex_grid = storage.hex_grid
+    return hex_grid ~= nil and hex_grid.continuous_geometry ~= false
 end
 
 
@@ -78,6 +90,22 @@ end
 -- axial_scale: size of hexes (distance from center to corner)
 -- axial_rotation: rotation of the grid in radians
 function axial.get_hex_containing(rect_pos, axial_scale, axial_rotation)
+    if is_continuous() then
+        ---@diagnostic disable-next-line: deprecated
+        return axial.get_hex_containing_continuous(rect_pos, axial_scale, axial_rotation)
+    end
+
+    -- Create floating point coordinates on the hex grid's lattice
+    local q, r = hex_lattice.get_fractional_hex(rect_pos, axial_scale or 1, axial_rotation)
+    -- Round to the nearest hex
+    return axial.round {q = q, r = r}
+end
+
+---Convert rectangular coordinates to axial coordinates, placing hexes at the exact regular-hexagon spacing rather than
+---on the hex grid's lattice.
+---Superseded by `axial.get_hex_containing`, and only still reached by the worlds that were generated with it.
+---@deprecated
+function axial.get_hex_containing_continuous(rect_pos, axial_scale, axial_rotation)
     -- Default values
     axial_scale = axial_scale or 1
     axial_rotation = axial_rotation or 0
@@ -107,6 +135,23 @@ end
 ---@param axial_rotation number
 ---@return MapPosition
 function axial.get_hex_center(hex_pos, axial_scale, axial_rotation)
+    if is_continuous() then
+        ---@diagnostic disable-next-line: deprecated
+        return axial.get_hex_center_continuous(hex_pos, axial_scale, axial_rotation)
+    end
+
+    return hex_lattice.get_hex_center(hex_pos, axial_scale or 1, axial_rotation)
+end
+
+---Convert axial coordinates to rectangular coordinates (center of hex), placing hexes at the exact regular-hexagon
+---spacing rather than on the hex grid's lattice.
+---Superseded by `axial.get_hex_center`, and only still reached by the worlds that were generated with it.
+---@param hex_pos HexPos
+---@param axial_scale number
+---@param axial_rotation number
+---@return MapPosition
+---@deprecated
+function axial.get_hex_center_continuous(hex_pos, axial_scale, axial_rotation)
     -- Default values
     axial_scale = axial_scale or 1
     axial_rotation = axial_rotation or 0
@@ -124,6 +169,18 @@ function axial.get_hex_center(hex_pos, axial_scale, axial_rotation)
     end
 
     return {x = x, y = y}
+end
+
+---Get the distance from a hex's center to the middle of one of its sides, i.e. the radius of the largest circle that
+---fits inside the hex.
+---@param axial_scale number|nil
+---@return number
+function axial.get_hex_inradius(axial_scale)
+    if is_continuous() then
+        return (axial_scale or 1) * storage.constants.ROOT_THREE_OVER_TWO
+    end
+
+    return hex_lattice.get_lattice(axial_scale or 1).half_width
 end
 
 ---@param direction AxialDirection
@@ -285,14 +342,38 @@ function axial.rotate(hex, center, rotation_steps)
 end
 
 -- Get the corner points of a hex in rectangular coordinates
+---@param hex_pos HexPos
+---@param axial_scale number|nil
+---@param axial_rotation number|nil
+---@param hex_size_decrement number|nil
+---@return MapPosition[]
 function axial.get_hex_corners(hex_pos, axial_scale, axial_rotation, hex_size_decrement)
+    if is_continuous() then
+        ---@diagnostic disable-next-line: deprecated
+        return axial.get_hex_corners_continuous(hex_pos, axial_scale, axial_rotation, hex_size_decrement)
+    end
+
+    return hex_lattice.get_hex_corners(hex_pos, axial_scale or 1, axial_rotation, hex_size_decrement)
+end
+
+---Get the corner points of a hex in rectangular coordinates, placing hexes at the exact regular-hexagon spacing rather
+---than on the hex grid's lattice.
+---Superseded by `axial.get_hex_corners`, and only still reached by the worlds that were generated with it.
+---@param hex_pos HexPos
+---@param axial_scale number|nil
+---@param axial_rotation number|nil
+---@param hex_size_decrement number|nil
+---@return MapPosition[]
+---@deprecated
+function axial.get_hex_corners_continuous(hex_pos, axial_scale, axial_rotation, hex_size_decrement)
     -- Default values
     axial_scale = axial_scale or 1
     axial_rotation = axial_rotation or 0
     hex_size_decrement = hex_size_decrement or 0
 
     -- Get center without rotation
-    local center = axial.get_hex_center(hex_pos, axial_scale, 0)
+    ---@diagnostic disable-next-line: deprecated
+    local center = axial.get_hex_center_continuous(hex_pos, axial_scale, 0)
     local corners = {}
 
     -- Calculate the six corners

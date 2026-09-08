@@ -1,5 +1,6 @@
 
 local lib = require "api.lib"
+local hex_lattice = require "api.util.hex_lattice"
 
 local blueprints = {}
 
@@ -83,6 +84,22 @@ end
 ---@param stack LuaItemStack
 function blueprints.save_item_stack(string_name, stack)
     storage.blueprints.item_stacks[string_name] = stack
+end
+
+---Line a blueprint's grid up with a hex grid, so that the blueprint lands the same way in every hex it is placed in.
+---@param blueprint LuaItemStack|LuaRecord
+---@param axial_scale number
+---@param axial_rotation number
+---@return TilePosition|nil snap_to_grid The grid that the blueprint was snapped to, or nil if the hex grid is rotated off of the tile grid.
+function blueprints.apply_hex_snapping(blueprint, axial_scale, axial_rotation)
+    local snapping = hex_lattice.get_blueprint_snapping(axial_scale, axial_rotation)
+    if not snapping then return end
+
+    blueprint.blueprint_snap_to_grid = snapping.snap_to_grid
+    blueprint.blueprint_absolute_snapping = true
+    blueprint.blueprint_position_relative_to_grid = snapping.position_relative_to_grid
+
+    return snapping.snap_to_grid
 end
 
 
